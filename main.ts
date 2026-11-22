@@ -28,10 +28,12 @@ function makeReadable(dir) {
     const path = join(dir, name);
     const stats = statSync(path);
     if (stats.isDirectory()) {
-      chmodSync(path, 0o755);
+      // Best-effort: an entry this process did not create may belong to
+      // someone else (see the note at the chmodSync(out) call below).
+      try { chmodSync(path, 0o755); } catch { /* not ours to chmod */ }
       makeReadable(path);
     } else {
-      chmodSync(path, 0o644);
+      try { chmodSync(path, 0o644); } catch { /* not ours to chmod */ }
     }
   }
 }
@@ -56,5 +58,10 @@ writeFileSync(
   }),
 );
 
-chmodSync(out, 0o755);
+// Best-effort: the grader mounts /output writable but owned by someone else
+// (root), so chmod on the directory itself fails with EPERM when the program
+// runs as uid 65534 — and an uncaught chmod throws the whole run (exit 1).
+// The files the program just wrote are owned by this process and already
+// world-readable, so skipping a refused chmod loses nothing.
+try { chmodSync(out, 0o755); } catch { /* not ours to chmod */ }
 makeReadable(out);
